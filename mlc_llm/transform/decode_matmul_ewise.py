@@ -7,6 +7,8 @@ from tvm.relax.dpl.pattern import GlobalVarPattern, TuplePattern
 
 def check_x_1dim(ctx: relax.transform.PatternCheckContext) -> bool:
     x = ctx.annotated_expr["x"]
+    if len(x.struct_info.shape) == 1:
+        return True
     n = x.struct_info.shape[-2]
     return isinstance(n, tir.IntImm) and n.value == 1
 

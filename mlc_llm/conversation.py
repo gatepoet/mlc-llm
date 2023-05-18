@@ -24,6 +24,7 @@ class SeparatorStyle(Enum):
     DOLLY = auto()
     OASST_PYTHIA = auto()
     MOSS = auto()
+    RWKV = auto()
 
 
 @dataclasses.dataclass
@@ -89,6 +90,16 @@ class Conversation:
                 else:
                     ret += role + ":"
             return ret
+        elif self.sep_style == SeparatorStyle.RWKV:
+            init_prompt = self.system.strip().split("\n")
+            init_prompt = [x.strip().strip("\u3000").strip("\r") for x in init_prompt]
+            ret = "\n" + ("\n".join(init_prompt)).strip() + self.sep
+            for role, message in self.messages:
+                if message:
+                    ret += role + ": " + message + self.sep
+                else:
+                    ret += role + ":"
+            return ret
         else:
             raise ValueError(f"Invalid style: {self.sep_style}")
 
@@ -134,6 +145,15 @@ class Conversation:
             for i, (role, message) in enumerate(self.messages[self.cur + 1 :]):
                 if message:
                     ret += role + ": " + message + seps[i % 2] + "\n"
+                else:
+                    ret += role + ":"
+            self.cur = len(self.messages) - 1
+            return ret
+        elif self.sep_style == SeparatorStyle.RWKV:
+            ret = self.sep
+            for role, message in self.messages[self.cur + 1 :]:
+                if message:
+                    ret += role + ": " + message + self.sep
                 else:
                     ret += role + ":"
             self.cur = len(self.messages) - 1
@@ -289,6 +309,21 @@ Capabilities and tools that MOSS can possess.
     sep2="<eom>",
 )
 
+conv_rwkv = Conversation(
+    system="""The following is a coherent verbose detailed conversation between a girl named Alice and her friend Bob. \
+Alice is very intelligent, creative and friendly. \
+Alice is unlikely to disagree with Bob, and Alice doesn't like to ask Bob questions. \
+Alice likes to tell Bob a lot about herself and her opinions. \
+Alice usually gives Bob kind, helpful and informative advices.
+""",
+    roles=("Bob", "Alice"),
+    messages=(),
+    offset=0,
+    sep_style=SeparatorStyle.RWKV,
+    sep="\n\n",
+    sep2="\n\n",
+)
+
 conv_templates = {
     "conv_one_shot": conv_one_shot,
     "vicuna_v1.1": conv_vicuna_v1_1,
@@ -297,6 +332,7 @@ conv_templates = {
     "oasst": conv_oasst,
     "stablelm": conv_stablelm,
     "moss": conv_moss,
+    "rwkv": conv_rwkv,
 }
 
 

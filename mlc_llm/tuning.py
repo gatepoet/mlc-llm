@@ -22,18 +22,122 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--target", type=str, default="auto")
     args = parser.parse_args()
-    sys.path.insert(0, args.path)
-    from merged import (  # type: ignore  # pylint: disable=import-outside-toplevel,import-error
+    sys.path.insert(0, f"{args.path}/debug")
+    from mod_tir_static import (  # type: ignore  # pylint: disable=import-outside-toplevel,import-error
         Module,
     )
 
-    from . import utils  # pylint: disable=import-outside-toplevel
+    from mlc_llm import utils  # pylint: disable=import-outside-toplevel
 
     args.mod = Module
     utils.parse_target(args)
     os.makedirs(args.work_dir, exist_ok=True)
     print("target:", args.target)
     return args
+
+
+def sch_matmul() -> Callable:
+    def sch_func(sch: tir.Schedule) -> None:
+        b0 = sch.get_block(name="matmul", func_name="main")
+        b1 = sch.get_block(name="root", func_name="main")
+        sch.pad_einsum(b0, [1, 64, 64])
+        (b2,) = sch.get_producers(b0)
+        (b3,) = sch.get_consumers(b0)
+        sch.annotate(
+            block_or_loop=b0,
+            ann_key="meta_schedule.tiling_structure",
+            ann_val="SSSRRSRS",
+        )
+        l2, l3, l4 = sch.get_loops(block=b0)
+        l10, l11, l12, l13, l14 = sch.split(
+            loop=l2, factors=[1, 1, 1, 1, 1], preserve_unit_iters=True
+        )
+        l20, l21, l22, l23, l24 = sch.split(
+            loop=l3, factors=[393, 1, 64, 1, 2], preserve_unit_iters=True
+        )
+        v25, v26, v27 = sch.sample_perfect_tile(
+            loop=l4, n=3, max_innermost_factor=64, decision=[128, 2, 8]
+        )
+        l28, l29, l30 = sch.split(
+            loop=l4, factors=[v25, v26, v27], preserve_unit_iters=True
+        )
+        sch.reorder(l10, l20, l11, l21, l12, l22, l28, l29, l13, l23, l30, l14, l24)
+        l31 = sch.fuse(l10, l20, preserve_unit_iters=True)
+        sch.bind(loop=l31, thread_axis="blockIdx.x")
+        l32 = sch.fuse(l11, l21, preserve_unit_iters=True)
+        sch.bind(loop=l32, thread_axis="vthread.x")
+        l33 = sch.fuse(l12, l22, preserve_unit_iters=True)
+        sch.bind(loop=l33, thread_axis="threadIdx.x")
+        sch.annotate(
+            block_or_loop=b0,
+            ann_key="meta_schedule.thread_extent_low_inclusive",
+            ann_val=32,
+        )
+        sch.annotate(
+            block_or_loop=b0,
+            ann_key="meta_schedule.thread_extent_high_inclusive",
+            ann_val=1024,
+        )
+        b34 = sch.cache_write(block=b0, write_buffer_index=0, storage_scope="local")
+        sch.reverse_compute_at(block=b34, loop=l33, preserve_unit_loops=True, index=-1)
+        b35 = sch.cache_read(
+            block=b0, read_buffer_index=0, storage_scope="shared", consumer_blocks=[b0]
+        )
+        sch.compute_at(block=b35, loop=l28, preserve_unit_loops=True, index=-1)
+        l36, l37, l38, l39, l40, l41 = sch.get_loops(block=b35)
+        l42 = sch.fuse(l40, l41, preserve_unit_iters=True)
+        v43 = sch.sample_categorical(
+            candidates=[1, 2, 4, 8], probs=[0.25, 0.25, 0.25, 0.25]
+        )
+        sch.annotate(
+            block_or_loop=b35, ann_key="meta_schedule.cooperative_fetch", ann_val=v43
+        )
+        b44 = sch.cache_read(
+            block=b0, read_buffer_index=1, storage_scope="shared", consumer_blocks=[b0]
+        )
+        sch.compute_at(block=b44, loop=l28, preserve_unit_loops=True, index=-1)
+        l45, l46, l47, l48, l49, l50 = sch.get_loops(block=b44)
+        l51 = sch.fuse(l49, l50, preserve_unit_iters=True)
+        v52 = sch.sample_categorical(
+            candidates=[1, 2, 4, 8], probs=[0.25, 0.25, 0.25, 0.25]
+        )
+        sch.annotate(
+            block_or_loop=b44, ann_key="meta_schedule.cooperative_fetch", ann_val=v52
+        )
+        v53 = sch.sample_categorical(
+            candidates=[0, 16, 64, 512, 1024], probs=[0.2, 0.2, 0.2, 0.2, 0.2]
+        )
+        sch.annotate(
+            block_or_loop=b1, ann_key="meta_schedule.unroll_explicit", ann_val=v53
+        )
+        # sch.enter_postproc()
+
+        sch.unannotate(block_or_loop=b35, ann_key="meta_schedule.cooperative_fetch")
+        l54, l55, l56, l57, l58 = sch.get_loops(block=b35)
+        l59, l60, l61 = sch.split(
+            loop=l58, factors=[None, 64, 2], preserve_unit_iters=True
+        )
+        sch.vectorize(loop=l61)
+        sch.bind(loop=l60, thread_axis="threadIdx.x")
+        sch.unannotate(block_or_loop=b44, ann_key="meta_schedule.cooperative_fetch")
+        l62, l63, l64, l65, l66 = sch.get_loops(block=b44)
+        l67, l68, l69 = sch.split(
+            loop=l66, factors=[None, 64, 2], preserve_unit_iters=True
+        )
+        sch.vectorize(loop=l69)
+        sch.bind(loop=l68, thread_axis="threadIdx.x")
+        b70 = sch.get_block(name="root", func_name="main")
+        sch.unannotate(block_or_loop=b70, ann_key="meta_schedule.unroll_explicit")
+        b104 = sch.get_block(name="matmul", func_name="main")
+        l105, l106, l107, l108, l109, l110, l111, l112, l113, l114 = sch.get_loops(
+            block=b104
+        )
+        b115 = sch.decompose_reduction(block=b104, loop=l108)
+
+        sch.compute_inline(b2)
+        sch.reverse_compute_inline(b3)
+
+    return sch_func
 
 
 def sch_fused_decode_gemv(
@@ -165,13 +269,13 @@ def main():
     #         tracker_key="m2-mac-mini",
     #     ),
     # )
-    runner = "local"
-    ms.tir_integration.tune_tir_module(
+    runner = ms.runner.LocalRunner(timeout_sec=10)
+    ms.tir_integration.tune_tir(
         mod=args.mod,
         target=args.target,
         work_dir=args.work_dir,
-        max_trials_global=10000,
-        max_trials_per_task=2,
+        max_trials_global=2000,
+        max_trials_per_task=1000,
         runner=runner,
         database=database,
         space="cuda",
@@ -199,16 +303,14 @@ def main():
             "decode4": sch_decode(),
             "decode5": sch_decode(),
             "decode6": sch_decode(),
+            "matmul3": sch_matmul(),
         },
     )
     if os.path.exists(path_workload):
         os.remove(path_workload)
     if os.path.exists(path_tuning_record):
         os.remove(path_tuning_record)
-    database.dump_pruned(
-        path_workload=path_workload,
-        path_tuning_record=path_tuning_record,
-    )
+    database.dump_pruned(ms.database.JSONDatabase(work_dir=args.path))
 
 
 if __name__ == "__main__":

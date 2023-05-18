@@ -7,7 +7,7 @@ from tvm import IRModule
 class DispatchTIROperator:  # pylint: disable=too-few-public-methods
     def __init__(self, model: str):
         # pylint: disable=import-outside-toplevel
-        if model == "llama":
+        if model in ["llama", "rwkv"]:
             from .llama import lookup
 
         elif model == "gpt_neox":

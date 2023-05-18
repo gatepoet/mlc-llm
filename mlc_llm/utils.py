@@ -7,7 +7,6 @@ from platform import system
 from typing import List, Tuple
 
 import tvm
-import tvm.testing
 from tvm import meta_schedule as ms
 from tvm import relax
 
@@ -42,9 +41,12 @@ quantization_dict = {
     "q0f16": Quantization(
         name="q0f16", mode="no", sym=False, storage_nbit=-1, model_dtype="float16"
     ),
+    "q8f16": Quantization(
+        name="q8f16", mode="uint8", sym=False, storage_nbit=-1, model_dtype="float16"
+    ),
 }
 
-supported_model_types = set(["llama", "gpt_neox", "moss"])
+supported_model_types = set(["llama", "gpt_neox", "moss", "rwkv"])
 
 
 def argparse_postproc_common(args: argparse.Namespace) -> None:
@@ -69,8 +71,10 @@ def argparse_postproc_common(args: argparse.Namespace) -> None:
         args.conv_template = "dolly"  # TODO
         args.model_category = "gpt_neox"
     elif args.model.startswith("moss-"):
-        args.conv_template = "moss"
         args.model_category = "moss"
+    elif args.model.startswith("rwkv-"):
+        args.conv_template = "rwkv"
+        args.model_category = "rwkv"
     else:
         raise ValueError(f"Model {args.model} not supported")
     args.quantization = quantization_dict[args.quantization]

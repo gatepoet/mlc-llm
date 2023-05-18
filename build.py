@@ -1,3 +1,5 @@
+# pylint: disable=not-callable, missing-docstring
+
 import argparse
 import os
 import pickle
@@ -6,12 +8,11 @@ from typing import List
 import json
 
 import tvm
-import tvm.testing
 from tvm import relax
 
 import mlc_llm
 from mlc_llm import utils
-from mlc_llm.relax_model import gpt_neox, llama, moss
+from mlc_llm.relax_model import gpt_neox, llama, moss, rwkv
 
 
 def _parse_args():
@@ -153,7 +154,7 @@ def debug_dump_script(mod, name, args):
         return
     dump_path = os.path.join(args.artifact_path, "debug", name)
     with open(dump_path, "w") as outfile:
-        outfile.write(mod.script(show_meta=True))
+        outfile.write(mod.script())
     print(f"Dump mod to {dump_path}")
 
 
@@ -189,22 +190,38 @@ def mod_transform_before_build(
     args: argparse.Namespace,
 ) -> tvm.IRModule:
     """First-stage: Legalize ops and trace"""
-    model_names = [
-        "encoding",
-        "decoding",
-        "create_kv_cache",
-        "softmax_with_temperature",
-        "get_metadata",
-    ]
+    if ARGS.model.startswith("rwkv-"):
+        model_names = [
+            "decoding",
+            "create_kv_cache",
+            "softmax_with_temperature",
+            "get_metadata",
+            "reset_kv_cache",
+        ]
+    else:
+        model_names = [
+            "encoding",
+            "decoding",
+            "create_kv_cache",
+            "softmax_with_temperature",
+            "get_metadata",
+        ]
 
     if args.quantization.mode != "no":
-        mod = mlc_llm.transform.GroupQuantize(
-            group_size=40 if args.quantization.mode.endswith("3") else 32,
-            sym=args.quantization.sym,
-            mode=args.quantization.mode,
-            storage_nbit=args.quantization.storage_nbit,
-            dtype=args.quantization.model_dtype,
-        )(mod)
+        if ARGS.model.startswith("rwkv-"):
+            mod = mlc_llm.transform.RWKVQuantize(
+                mode=args.quantization.mode,
+                dtype=args.quantization.model_dtype,
+            )(mod)
+        else:
+            mod = mlc_llm.transform.GroupQuantize(
+                group_size=40 if args.quantization.mode.endswith("3") else 32,
+                sym=args.quantization.sym,
+                mode=args.quantization.mode,
+                storage_nbit=args.quantization.storage_nbit,
+                dtype=args.quantization.model_dtype,
+            )(mod)
+    debug_dump_script(mod, "quantized.py", args)
     mod = mlc_llm.transform.FuseTransposeMatmul()(mod)
 
     mod = relax.pipeline.get_pipeline()(mod)
@@ -216,6 +233,7 @@ def mod_transform_before_build(
     mod_transform, mod_deploy = utils.split_transform_deploy_mod(mod, model_names)
 
     debug_dump_script(mod_transform, "mod_lift_params.py", args)
+    debug_dump_script(mod_deploy, "mod_deploy.py", args)
 
     new_params = utils.transform_params(mod_transform, model_params)
     utils.save_params(new_params, args.artifact_path)
@@ -313,6 +331,8 @@ if __name__ == "__main__":
                 )
             elif ARGS.model_category == "moss":
                 mod, params = moss.get_model(ARGS, config)
+            elif ARGS.model_category == "rwkv":
+                mod, params = rwkv.get_model(ARGS, config)
             else:
                 raise ValueError(f"Model {ARGS.model} not supported")
             mod = mod_transform_before_build(mod, params, ARGS)
