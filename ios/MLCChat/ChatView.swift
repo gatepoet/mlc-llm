@@ -10,6 +10,7 @@ struct ChatView: View {
     @EnvironmentObject var state: ChatState
     @Namespace var bottomID;
     @Namespace var infoID;
+    @Environment(\.dismiss) private var dismiss
         
     init() {}
 
@@ -55,7 +56,16 @@ struct ChatView: View {
             }.frame(minHeight: CGFloat(70)).padding()
         }
         .navigationBarTitle(state.modelName, displayMode: .inline)
+        .navigationBarBackButtonHidden()
         .toolbar{
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button() {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.backward")
+                }
+                .buttonStyle(.borderless)
+            }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Reset") {
                     resetChat()
