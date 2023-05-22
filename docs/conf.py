@@ -7,8 +7,8 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'MLC-LLM'
-copyright = '2023, MLC-LLM team'
-author = 'MLC-LLM team'
+copyright = '2023, MLC-LLM community'
+author = 'MLC-LLM community'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

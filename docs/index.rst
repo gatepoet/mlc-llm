@@ -12,27 +12,30 @@ Our mission is to **enable everyone to develop, optimize and deploy AI models na
 
 Everything runs locally  with no server support and accelerated with local GPUs on your phone and laptops.
 
-Supported platforms
--------------------
-
-- iPhone, iPad
-- Android phones
-- Metal GPUs and Intel/ARM MacBooks
-- AMD, Intel and NVIDIA GPUs via Vulkan on Windows and Linux
-- NVIDIA GPUs via CUDA on Windows and Linux
-- WebGPU on browsers (through companion project `WebLLM <https://github.com/mlc-ai/web-llm/tree/main>`__)
-
+`Join our Discord Server! <https://discord.gg/9Xpy2HGBuD>`_
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
+   :caption: Getting Started
+
+   install/index.rst
+
+.. toctree::
+   :maxdepth: 2
    :caption: User Guides
 
+   how-to/compile-models.rst
+   how-to/bring-your-own-models.rst
+   how-to/customize.rst
+
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
+   :caption: Misc
+
+   misc/faq.rst
+
+.. toctree::
+   :maxdepth: 2
    :caption: Contribute to MLC-LLM
 
    contribute/community.rst
-
-   
-
-
