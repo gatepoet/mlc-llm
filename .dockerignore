@@ -1,0 +1,9 @@
+
+**/.github
+
+dist
+docs
+site
+mlc_llm.egg-info
+.pkl_memorize_py3
+

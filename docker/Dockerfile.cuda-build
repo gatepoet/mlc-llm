@@ -1,0 +1,66 @@
+ARG CUDA_VERSION=12.1.1
+ARG BASE_IMAGE=nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
+
+FROM mambaorg/micromamba:1.5.1 as micromamba
+
+
+
+# NOTE: This Dockerfile is based on CUDA 12.1.
+# To benchmark on other CUDA versions, search and replace "12.1" and "121".
+FROM ${BASE_IMAGE} as mlc
+
+ARG CUDA_VERSION_SHORT=121
+ENV CUDA_VERSION_SHORT=$CUDA_VERSION_SHORT
+USER root
+
+RUN apt update                                                          && \
+    apt install --yes wget curl git vim build-essential openssh-server
+
+# if your image defaults to a non-root user, then you may want to make the
+# next 3 ARG commands match the values in your image. You can get the values
+# by running: docker run --rm -it my/image id -a
+ARG MAMBA_USER=mlc
+ARG MAMBA_USER_ID=1000
+ARG MAMBA_USER_GID=1000
+ARG PYTHON_VERSION=3.11
+ENV MAMBA_USER=$MAMBA_USER
+ENV MAMBA_ROOT_PREFIX="/opt/conda"
+ENV MAMBA_EXE="/bin/micromamba"
+ENV ENV_NAME="mlc"
+ENV MLC_PATH="/home/${MAMBA_USER}/mlc-llm"
+
+COPY --from=micromamba "$MAMBA_EXE" "$MAMBA_EXE"
+COPY --from=micromamba /usr/local/bin/_activate_current_env.sh /usr/local/bin/_activate_current_env.sh
+COPY --from=micromamba /usr/local/bin/_dockerfile_shell.sh /usr/local/bin/_dockerfile_shell.sh
+COPY --from=micromamba /usr/local/bin/_entrypoint.sh /usr/local/bin/_entrypoint.sh
+COPY --from=micromamba /usr/local/bin/_dockerfile_initialize_user_accounts.sh /usr/local/bin/_dockerfile_initialize_user_accounts.sh
+COPY --from=micromamba /usr/local/bin/_dockerfile_setup_root_prefix.sh /usr/local/bin/_dockerfile_setup_root_prefix.sh
+
+RUN /usr/local/bin/_dockerfile_initialize_user_accounts.sh && \
+    /usr/local/bin/_dockerfile_setup_root_prefix.sh
+
+SHELL ["/usr/local/bin/_dockerfile_shell.sh"]
+ENTRYPOINT ["/usr/local/bin/_entrypoint.sh"]
+CMD ["/bin/bash"]
+
+WORKDIR /home/${MAMBA_USER}
+
+RUN --mount=type=cache,target=/home/${MAMBA_USER}/.cache/micromamba \
+    micromamba create --yes -n ${ENV_NAME} -c conda-forge -c nvidia -c pytorch \
+    python=$PYTHON_VERSION llvmdev cmake=3.26 git git-lfs rust \
+    libgcc-ng cudnn ccache pytorch torchvision torchaudio pytorch-cuda=12.1 cuda-toolkit=12.1 && \
+    micromamba clean --all --yes
+RUN micromamba run -n "$ENV_NAME" git lfs install
+
+
+RUN mkdir -p ${MLC_PATH}/dist
+WORKDIR ${MLC_PATH}
+
+COPY . .
+WORKDIR ${MLC_PATH}/build
+RUN micromamba run -n ${ENV_NAME} cmake ..
+RUN micromamba run -n ${ENV_NAME} cmake --build . --parallel $(nproc)
+USER $MAMBA_USER
+RUN echo "export PYTHONPATH=\"${MLC_PATH}:$PYTHONPATH\"" >> ~/.bashrcc
+RUN micromamba run -n ${ENV_NAME} pip install -e . gradio auto-gptq
+

@@ -239,7 +239,8 @@ def launch_gradio(
         stats_button.click(mod.gradio_stats, [], [stats_output])
 
     # launch to the web
-    demo.launch(share=share, enable_queue=True, server_port=port, server_name=host)
+
+    demo.queue(max_size=50).launch(share=share, server_port=port, server_name=host)
 
 
 if __name__ == "__main__":
